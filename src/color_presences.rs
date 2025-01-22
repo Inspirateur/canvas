@@ -7,7 +7,7 @@ use crate::{raster::Raster, vec_map::VecMap};
 
 #[derive(Clone)]
 pub struct ColorPresences {
-    data: VecMap<Color32, Raster<u8>>,
+    data: VecMap<Color32, Raster>,
     dims: [usize; 2],
 }
 

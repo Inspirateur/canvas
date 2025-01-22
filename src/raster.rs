@@ -2,10 +2,10 @@ use glam::IVec2;
 use grid::Grid;
 
 #[derive(Clone)]
-pub struct Raster<T>(pub Grid<T>);
+pub struct Raster(pub Grid<u8>);
 
-impl<T: Clone> Raster<T> {
-    pub fn set(&mut self, other: &Grid<T>, pos: &IVec2) {
+impl Raster {
+    pub fn set_max(&mut self, other: &Grid<u8>, pos: &IVec2) {
         for ((x, y), val) in other.indexed_iter() {
             let pos = pos + IVec2::new(x as i32, y as i32);
             if pos.cmplt(IVec2::ZERO).any()
@@ -14,7 +14,8 @@ impl<T: Clone> Raster<T> {
             {
                 continue;
             }
-            self.0[(pos.x as usize, pos.y as usize)] = val.clone();
+            let xy = (pos.x as usize, pos.y as usize);
+            self.0[xy] = self.0[xy].max(val.clone());
         }
     }
 }

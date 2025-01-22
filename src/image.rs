@@ -6,7 +6,7 @@ use crate::{brush::Brush, color_presences::ColorPresences, raster::Raster};
 
 pub struct CanvasImage {
     colors: ColorPresences,
-    current_stroke: Raster<u8>,
+    current_stroke: Raster,
     dims: [usize; 2],
 }
 
@@ -21,7 +21,7 @@ impl CanvasImage {
 
     pub fn preview(&mut self, brush: &Brush, pos: &IVec2, color: Color32) -> ColorImage {
         // Accumulate the new brush stroke in the ongoing stroke
-        self.current_stroke.set(&brush.texture, pos);
+        self.current_stroke.set_max(&brush.texture, pos);
         // Render a new preview with the updated stroke
         let mut preview = self.colors.clone();
         preview.apply(&self.current_stroke.0, &IVec2::ZERO, color)
