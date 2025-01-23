@@ -38,12 +38,12 @@ impl CanvasImage {
         Vec2::new(self.dims[0] as f32, self.dims[1] as f32)
     }
 
-    pub fn width(&self) -> f32 {
-        self.dims[0] as f32
+    pub fn width(&self) -> usize {
+        self.dims[0]
     }
 
-    pub fn height(&self) -> f32 {
-        self.dims[1] as f32
+    pub fn height(&self) -> usize {
+        self.dims[1]
     }
 
     pub fn aspect_ratio(&self) -> f32 {
