@@ -1,3 +1,4 @@
+mod easings;
 mod vec_map;
 mod brush;
 mod color_presences;

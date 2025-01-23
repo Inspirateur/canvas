@@ -1,9 +1,10 @@
 use eframe::egui;
 use eframe::egui::*;
 use eframe::App;
-use grid::Grid;
 
+use crate::brush::round_brush;
 use crate::brush::Brush;
+use crate::easings::*;
 use crate::image::CanvasImage;
 
 /// Shrinks the given rect as little as possible to fit the given aspect ratio (width/height)
@@ -22,23 +23,10 @@ pub struct CanvasApp {
 
 impl CanvasApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let mut brush = Brush {
-            texture: Grid::new(3, 3),
-            spacing: 1.,
-        };
-        brush.texture[(1, 1)] = u8::MAX;
-        brush.texture[(0, 1)] = u8::MAX/2;
-        brush.texture[(2, 1)] = u8::MAX/2;
-        brush.texture[(1, 0)] = u8::MAX/2;
-        brush.texture[(1, 2)] = u8::MAX/2;
-        brush.texture[(0, 0)] = u8::MAX/4;
-        brush.texture[(2, 2)] = u8::MAX/4;
-        brush.texture[(0, 2)] = u8::MAX/4;
-        brush.texture[(2, 0)] = u8::MAX/4;
         Self {
             image: CanvasImage::new(128, 128),
             color: Color32::from_rgb(25, 200, 100),
-            brush,
+            brush: round_brush(5, &exponential_easing),
             render_texture: _cc.egui_ctx.load_texture(
                 "render",
                 egui::ColorImage::example(),

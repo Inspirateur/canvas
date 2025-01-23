@@ -20,8 +20,10 @@ impl CanvasImage {
     }
 
     pub fn preview(&mut self, brush: &Brush, pos: &IVec2, color: Color32) -> ColorImage {
+        // adjust pos so that it is at the center of the brush
+        let pos = pos - IVec2::new(brush.width() as i32/2, brush.height() as i32/2);
         // Accumulate the new brush stroke in the ongoing stroke
-        self.current_stroke.set_max(&brush.texture, pos);
+        self.current_stroke.set_max(&brush.texture, &pos);
         // Render a new preview with the updated stroke
         let mut preview = self.colors.clone();
         preview.apply(&self.current_stroke.0, &IVec2::ZERO, color)
