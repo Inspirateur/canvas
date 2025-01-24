@@ -20,8 +20,7 @@ impl ColorPresences {
         }
     }
 
-    pub fn apply(&mut self, brush: &Grid<u8>, pos: &IVec2, color: Color32) -> ColorImage {
-        let mut pixels = vec![Color32::TRANSPARENT; self.dims[0]*self.dims[1]];
+    pub fn apply(&mut self, brush: &Grid<u8>, pos: &IVec2, color: Color32) {
         let rgb = [color.r(), color.g(), color.b()];
         if !self.data.contains_key(&rgb) {
             self.data.0.push((rgb, Raster(Grid::new(self.dims[0], self.dims[1]))));
@@ -45,22 +44,31 @@ impl ColorPresences {
             }
             // Add the presence of the new color
             self.data.0[presence_idx].1.0[xy] += new_val;
-            // Render the colors
-            let mut r = 0.;
-            let mut g = 0.;
-            let mut b = 0.;
-            let mut a = 0;
-            for ([cr, cg, cb], raster) in self.data.0.iter() {
-                if raster.0[xy] == 0 {
-                    continue;
+        }
+    }
+
+    pub fn render(&self) -> ColorImage {
+        let mut pixels = vec![Color32::TRANSPARENT; self.dims[0]*self.dims[1]];
+        for x in 0..self.dims[0] {
+            for y in 0..self.dims[1] {
+                let xy = (x, y);
+                // Render the colors
+                let mut r = 0.;
+                let mut g = 0.;
+                let mut b = 0.;
+                let mut a = 0;
+                for ([cr, cg, cb], raster) in self.data.0.iter() {
+                    if raster.0[xy] == 0 {
+                        continue;
+                    }
+                    let presence = raster.0[xy] as f32/u8::MAX as f32;
+                    r += *cr as f32*presence;
+                    g += *cg as f32*presence;
+                    b += *cb as f32*presence; 
+                    a += raster.0[xy];
                 }
-                let presence = raster.0[xy] as f32/u8::MAX as f32;
-                r += *cr as f32*presence;
-                g += *cg as f32*presence;
-                b += *cb as f32*presence; 
-                a += raster.0[xy];
+                pixels[xy.0+xy.1*self.dims[0]] = Color32::from_rgba_unmultiplied(r as u8, g as u8, b as u8, a);
             }
-            pixels[xy.0+xy.1*self.dims[0]] = Color32::from_rgba_unmultiplied(r as u8, g as u8, b as u8, a);
         }
         ColorImage { size: self.dims, pixels }
     }

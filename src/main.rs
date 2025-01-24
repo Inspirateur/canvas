@@ -1,4 +1,6 @@
 mod easings;
+mod array_queue;
+mod brush_stroke;
 mod vec_map;
 mod brush;
 mod color_presences;
