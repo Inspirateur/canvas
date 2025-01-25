@@ -38,6 +38,11 @@ impl CanvasImage {
         self.current_stroke = Raster(Grid::new(self.dims[0], self.dims[1]));
     }
 
+    pub fn fill(&mut self, pos: &IVec2, color: Color32) -> ColorImage {
+        self.colors.fill(pos, color);
+        self.colors.render()
+    }
+
     pub fn dims(&self) -> egui::Vec2 {
         Vec2::new(self.dims[0] as f32, self.dims[1] as f32)
     }

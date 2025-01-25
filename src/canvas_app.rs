@@ -1,6 +1,7 @@
 use eframe::egui;
 use eframe::egui::*;
 use eframe::App;
+use glam::IVec2;
 
 use crate::brush::round_brush;
 use crate::brush::Brush;
@@ -9,11 +10,15 @@ use crate::easings::*;
 use crate::image::CanvasImage;
 
 /// Shrinks the given size as little as possible to fit the given aspect ratio (width/height)
-pub fn shrink_to_aspect_ratio(size: Vec2, aspect_ratio: f32) -> Vec2 {
+fn shrink_to_aspect_ratio(size: Vec2, aspect_ratio: f32) -> Vec2 {
     Vec2::new(
         size.x.min(size.y*aspect_ratio), 
         size.y.min(size.x/aspect_ratio)
     )
+}
+
+fn to_ivec(pos: Pos2) -> IVec2 {
+    IVec2 { x: pos.x as i32, y: pos.y as i32 }
 }
 
 #[derive(PartialEq, Eq)]
@@ -31,6 +36,7 @@ pub struct CanvasApp {
     brush_stroke: BrushStroke,
     stroke_width: u32,
     stroke_color: Color32,
+    dragging: bool,
 }
 
 impl CanvasApp {
@@ -44,11 +50,12 @@ impl CanvasApp {
                 ColorImage::new([width, height], Color32::TRANSPARENT),
                 Default::default()
             ),
-            brush: round_brush(5, &exponential_easing),
+            brush: round_brush(4, &exponential_easing),
             brush_stroke: BrushStroke::new(),
             tool: Tool::Brush,
-            stroke_width: 4,
+            stroke_width: 3,
             stroke_color: Color32::from_rgb(25, 200, 100),
+            dragging: false
         }
     }
 
@@ -60,7 +67,7 @@ impl CanvasApp {
             ui.add_enabled(self.tool == Tool::Brush, Label::new("Size:"));
             if ui.add_enabled(
                 self.tool == Tool::Brush, 
-                Slider::new(&mut self.stroke_width, 1..=100).logarithmic(true)
+                Slider::new(&mut self.stroke_width, 1..=100).step_by(2.).logarithmic(true)
             ).changed() {
                 self.brush = round_brush(self.stroke_width as usize+1, &exponential_easing);
             }
@@ -110,19 +117,29 @@ impl CanvasApp {
             match self.tool {
                 Tool::Brush => {
                     for brush_pos in self.brush_stroke.update_stroke(canvas_pos, self.brush.spacing) {
-                        self.image.add_stroke(&self.brush, &glam::IVec2 { x: brush_pos.x as i32, y: brush_pos.y as i32 });
+                        self.image.add_stroke(&self.brush, &to_ivec(brush_pos));
                     }
                     self.render_texture.set(
                         self.image.preview_stroke(self.stroke_color), 
                         TextureOptions::NEAREST
                     )
                 },
+                Tool::Fill => {
+                    if !self.dragging {
+                        self.render_texture.set(
+                            self.image.fill(&to_ivec(canvas_pos), self.stroke_color), 
+                            TextureOptions::NEAREST
+                        );
+                    }
+                },
                 _ => {}
             }
+            self.dragging = true;
         }
         if response.drag_stopped() {
             self.image.apply_preview(self.stroke_color);
             self.brush_stroke.clear_stroke();
+            self.dragging = false;
         }
         Image::from_texture((self.render_texture.id(), self.image.dims()))
             .paint_at(&ui, painter.clip_rect());

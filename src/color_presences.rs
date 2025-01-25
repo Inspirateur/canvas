@@ -7,8 +7,8 @@ use crate::{raster::Raster, vec_map::VecMap};
 
 #[derive(Clone)]
 pub struct ColorPresences {
-    // [u8; 3] is rgb
-    data: VecMap<[u8; 3], Raster>,
+    // [u8; 4] is rgba
+    data: VecMap<[u8; 4], Raster>,
     dims: [usize; 2],
 }
 
@@ -21,11 +21,11 @@ impl ColorPresences {
     }
 
     pub fn apply(&mut self, brush: &Grid<u8>, pos: &IVec2, color: Color32) {
-        let rgb = [color.r(), color.g(), color.b()];
-        if !self.data.contains_key(&rgb) {
-            self.data.0.push((rgb, Raster(Grid::new(self.dims[0], self.dims[1]))));
+        let rgba = [color.r(), color.g(), color.b(), color.a()];
+        if !self.data.contains_key(&rgba) {
+            self.data.0.push((rgba, Raster(Grid::new(self.dims[0], self.dims[1]))));
         }
-        let presence_idx = self.data.0.iter().position(|(c, _)| *c == rgb).unwrap();
+        let presence_idx = self.data.0.iter().position(|(c, _)| *c == rgba).unwrap();
         for ((x, y), &new_val) in brush.indexed_iter() {
             let xy = (x + pos.x as usize, y + pos.y as usize);
             // amount of color to be applied
@@ -57,7 +57,7 @@ impl ColorPresences {
                 let mut g = 0.;
                 let mut b = 0.;
                 let mut a = 0;
-                for ([cr, cg, cb], raster) in self.data.0.iter() {
+                for ([cr, cg, cb, _], raster) in self.data.0.iter() {
                     if raster.0[xy] == 0 {
                         continue;
                     }
@@ -72,4 +72,162 @@ impl ColorPresences {
         }
         ColorImage { size: self.dims, pixels }
     }
+
+    fn colors_at(&self, xy: (usize, usize)) -> Vec<[u8; 4]> {
+        self.data.0.iter()
+            .filter_map(|(rgba, raster)| {
+                let val = raster.0[xy];
+                if val > 0 {
+                    Some(rgba.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn fill(&mut self, pos: &IVec2, color: Color32) {
+        let rgba = [color.r(), color.g(), color.b(), color.a()];
+        if !self.data.contains_key(&rgba) {
+            self.data.0.push((rgba, Raster(Grid::new(self.dims[0], self.dims[1]))));
+        }
+        let start = (pos.x as usize, pos.y as usize);
+        let start_colors = self.colors_at(start);
+        if start_colors.len() == 0 {
+            self.fill_empty_space(start, rgba);
+        } else {
+            self.fill_occupied_space(start, start_colors, rgba);
+        }
+    }
+
+    pub fn fill_pixel(&mut self, pos: (usize, usize), raster_idx: usize) -> bool {
+        let mut current_presence = 0;
+        for i in 0..self.data.0.len() {
+            if i == raster_idx {
+                continue;
+            }
+            current_presence += self.data[i].0[pos];
+        }
+        if current_presence >= u8::MAX-6 {
+            return false;
+        }
+        let spare_presence = u8::MAX-current_presence;
+        if self.data[raster_idx].0[pos] == spare_presence {
+            return false;
+        }
+        self.data[raster_idx].0[pos] = spare_presence;
+        true
+    }
+    
+    /// Fills the biggest horizontal span from seed within [min, max[, returning [left, right[ edges of span
+    /// if seed cannot be filled then (seed.x, seed.x) is returned, 
+    /// so left < right can be used to check if operation was succesful
+    fn fill_empty_span(&mut self, seed: (usize, usize), min: usize, max: usize, raster_idx: usize) -> (usize, usize) {
+        if !self.fill_pixel(seed, raster_idx) {
+            return (seed.0, seed.0);
+        }
+        let mut left = seed.0;
+        loop {
+            if left > min {
+                left -= 1;
+            } else {
+                break;
+            }
+            if !self.fill_pixel((left, seed.1), raster_idx) {
+                left += 1;
+                break;
+            }
+        }
+        let mut right = seed.0+1;
+        while right < max && self.fill_pixel((right, seed.1), raster_idx) {
+            right += 1;
+        }
+        (left, right)
+    }
+
+    fn fill_empty_space(&mut self, start: (usize, usize), new_color: [u8; 4]) {
+        let raster_idx = self.data.position(&new_color).unwrap();
+        // special case for the first span
+        let start_span = self.fill_empty_span(start, 0, self.dims[0], raster_idx);
+        let mut spans = Vec::new();
+        self.checked_span_add(&mut spans, start_span, start.1, From::Above);
+        self.checked_span_add(&mut spans, start_span, start.1, From::Below);
+        while let Some(span) = spans.pop() {
+            let child_span = self.fill_empty_span((span.left, span.y), 0, self.dims[1], raster_idx);
+            self.checked_span_add(&mut spans, child_span, span.y, span.from);
+            let left = child_span.0;
+            let mut right = child_span.1+1;
+            while right < span.right {
+                let child_span = self.fill_empty_span((right, span.y), span.left, self.dims[1], raster_idx);
+                self.checked_span_add(&mut spans, child_span, span.y, span.from);
+                right = child_span.1+1;
+            }
+            right -= 1;
+            self.checked_span_add(&mut spans, (left, span.left - if span.left > 0 { 1 } else { 0 }), span.y, span.from.opposite());
+            self.checked_span_add(&mut spans, (span.right+1, right), span.y, span.from.opposite());
+        }
+    }
+
+    fn fill_occupied_space(&mut self, start: (usize, usize), start_colors: Vec<[u8; 4]>, new_color: [u8; 4]) {
+        // TODO: this
+    }
+
+    fn checked_span_add(&self, spans: &mut Vec<FillSpan>, span: (usize, usize), y: usize, dir: From) {
+        if span.0 >= span.1 {
+            return;
+        }
+        if span.0 >= self.dims[0] {
+            return;
+        }
+        match dir {
+            From::Above => {
+                if y == 0 {
+                    return;
+                }
+                spans.push(
+                    FillSpan {
+                        left: span.0,
+                        right: span.1,
+                        y: y-1,
+                        from: dir
+                    }
+                );
+            },
+            From::Below => {
+                if y+1 >= self.dims[1] {
+                    return;
+                }
+                spans.push(
+                    FillSpan {
+                        left: span.0,
+                        right: span.1,
+                        y: y+1,
+                        from: dir
+                    }
+                );
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum From {
+    Above,
+    Below
+}
+
+impl From {
+    pub fn opposite(&self) -> Self {
+        match self {
+            From::Above => From::Below,
+            From::Below => From::Above,
+        }
+    }
+}
+
+struct FillSpan {
+    left: usize,
+    right: usize,
+    y: usize,
+    from: From
 }
