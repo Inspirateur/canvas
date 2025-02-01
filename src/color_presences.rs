@@ -20,6 +20,23 @@ impl ColorPresences {
         }
     }
 
+    fn apply_presence(&mut self, pos: (usize, usize), raster_idx: usize, presence: u8) {
+        // Check what will be left for the other color after the new color is applied (could be 0)
+        let spare_presence = u8::MAX - presence;
+        for (_, other_presence) in self.data.0.iter_mut() {
+            // Previous color presences are affected by the new color
+            // For example if the new color has 70% presence, all previous color shrink by 70% 
+            // (this is true even if the total wasn't at 100%)
+            if spare_presence == 0 {
+                other_presence.0[pos] = 0;
+            } else {
+                other_presence.0[pos] = (other_presence.0[pos] as f32 * spare_presence as f32/u8::MAX as f32) as u8;
+            }
+        }
+        // Add the presence of the new color
+        self.data.0[raster_idx].1.0[pos] += presence;
+    }
+
     pub fn apply(&mut self, brush: &Grid<u8>, pos: &IVec2, color: Color32) {
         let rgba = [color.r(), color.g(), color.b(), color.a()];
         if !self.data.contains_key(&rgba) {
@@ -30,20 +47,7 @@ impl ColorPresences {
             let xy = (x + pos.x as usize, y + pos.y as usize);
             // amount of color to be applied
             let new_val = (new_val as f32 * color.a() as f32 / u8::MAX as f32) as u8;
-            // Check what will be left for the other color after the new color is applied (could be 0)
-            let spare_presence = u8::MAX - new_val;
-            for (_, presence) in self.data.0.iter_mut() {
-                // Previous color presences are affected by the new color
-                // For example if the new color has 70% presence, all previous color shrink by 70% 
-                // (this is true even if the total wasn't at 100%)
-                if spare_presence == 0 {
-                    presence.0[xy] = 0;
-                } else {
-                    presence.0[xy] = (presence.0[xy] as f32 * spare_presence as f32/u8::MAX as f32) as u8;
-                }
-            }
-            // Add the presence of the new color
-            self.data.0[presence_idx].1.0[xy] += new_val;
+            self.apply_presence(xy, presence_idx, new_val);
         }
     }
 
@@ -100,7 +104,7 @@ impl ColorPresences {
         }
     }
 
-    pub fn fill_pixel(&mut self, pos: (usize, usize), raster_idx: usize) -> bool {
+    fn fill_empty_pixel(&mut self, pos: (usize, usize), raster_idx: usize) -> bool {
         let mut current_presence = 0;
         for i in 0..self.data.0.len() {
             if i == raster_idx {
@@ -118,12 +122,26 @@ impl ColorPresences {
         self.data[raster_idx].0[pos] = spare_presence;
         true
     }
+
+    fn fill_occupied_pixel(&mut self, pos: (usize, usize), raster_idx: usize, source_rasters: &Vec<usize>, scaling: f32) -> bool {
+        let (min_presence, min_idx) = source_rasters.iter().map(|&idx| (self.data[idx].0[pos], idx)).min().unwrap();
+        if min_presence == 0 {
+            return false;
+        }
+        self.data[min_idx].0[pos] = 0;
+        self.apply_presence(pos, raster_idx, (min_presence as f32*scaling) as u8);
+        true
+    }
     
     /// Fills the biggest horizontal span from seed within [min, max[, returning [left, right[ edges of span
     /// if seed cannot be filled then (seed.x, seed.x) is returned, 
     /// so left < right can be used to check if operation was succesful
-    fn fill_empty_span(&mut self, seed: (usize, usize), min: usize, max: usize, raster_idx: usize) -> (usize, usize) {
-        if !self.fill_pixel(seed, raster_idx) {
+    fn fill_empty_span(
+        &mut self, seed: (usize, usize), 
+        min: usize, max: usize, 
+        raster_idx: usize, 
+    ) -> (usize, usize) {
+        if !self.fill_empty_pixel(seed, raster_idx) {
             return (seed.0, seed.0);
         }
         let mut left = seed.0;
@@ -133,13 +151,43 @@ impl ColorPresences {
             } else {
                 break;
             }
-            if !self.fill_pixel((left, seed.1), raster_idx) {
+            if !self.fill_empty_pixel((left, seed.1), raster_idx) {
                 left += 1;
                 break;
             }
         }
         let mut right = seed.0+1;
-        while right < max && self.fill_pixel((right, seed.1), raster_idx) {
+        while right < max && self.fill_empty_pixel((right, seed.1), raster_idx) {
+            right += 1;
+        }
+        (left, right)
+    }
+
+    /// Equivalent of fill_empty_span for the fill on existing color variant 
+    fn fill_occupied_span(
+        &mut self, seed: (usize, usize), 
+        min: usize, max: usize, 
+        raster_idx: usize,
+        source_rasters: &Vec<usize>, 
+        scaling: f32
+    ) -> (usize, usize) {
+        if !self.fill_occupied_pixel(seed, raster_idx, source_rasters, scaling) {
+            return (seed.0, seed.0);
+        }
+        let mut left = seed.0;
+        loop {
+            if left > min {
+                left -= 1;
+            } else {
+                break;
+            }
+            if !self.fill_occupied_pixel((left, seed.1), raster_idx, source_rasters, scaling) {
+                left += 1;
+                break;
+            }
+        }
+        let mut right = seed.0+1;
+        while right < max && self.fill_occupied_pixel((right, seed.1), raster_idx, source_rasters, scaling) {
             right += 1;
         }
         (left, right)
@@ -169,7 +217,29 @@ impl ColorPresences {
     }
 
     fn fill_occupied_space(&mut self, start: (usize, usize), start_colors: Vec<[u8; 4]>, new_color: [u8; 4]) {
-        // TODO: this
+        let raster_idx = self.data.position(&new_color).unwrap();
+        let min_alpha = start_colors.iter().map(|c| c[3]).min().unwrap() as f32/u8::MAX as f32;
+        let scaling = (new_color[3] as f32/u8::MAX as f32)/min_alpha;
+        let source_rasters = start_colors.into_iter().map(|c| self.data.position(&c).unwrap()).collect();
+        // special case for the first span
+        let start_span = self.fill_occupied_span(start, 0, self.dims[0], raster_idx, &source_rasters, scaling);
+        let mut spans = Vec::new();
+        self.checked_span_add(&mut spans, start_span, start.1, From::Above);
+        self.checked_span_add(&mut spans, start_span, start.1, From::Below);
+        while let Some(span) = spans.pop() {
+            let child_span = self.fill_occupied_span((span.left, span.y), 0, self.dims[1], raster_idx, &source_rasters, scaling);
+            self.checked_span_add(&mut spans, child_span, span.y, span.from);
+            let left = child_span.0;
+            let mut right = child_span.1+1;
+            while right < span.right {
+                let child_span = self.fill_occupied_span((right, span.y), span.left, self.dims[1], raster_idx, &source_rasters, scaling);
+                self.checked_span_add(&mut spans, child_span, span.y, span.from);
+                right = child_span.1+1;
+            }
+            right -= 1;
+            self.checked_span_add(&mut spans, (left, span.left - if span.left > 0 { 1 } else { 0 }), span.y, span.from.opposite());
+            self.checked_span_add(&mut spans, (span.right+1, right), span.y, span.from.opposite());
+        }
     }
 
     fn checked_span_add(&self, spans: &mut Vec<FillSpan>, span: (usize, usize), y: usize, dir: From) {
