@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use eframe::egui;
 use eframe::egui::*;
 use eframe::App;
@@ -36,6 +38,7 @@ pub struct CanvasApp {
     stroke_width: u32,
     stroke_color: Color32,
     dragging: bool,
+    saving_path: Option<PathBuf>,
 }
 
 impl CanvasApp {
@@ -54,11 +57,39 @@ impl CanvasApp {
             tool: Tool::Brush,
             stroke_width: 3,
             stroke_color: Color32::from_rgb(25, 200, 100),
-            dragging: false
+            dragging: false,
+            saving_path: None
         }
     }
 
+    fn save(&mut self) {
+        let path = match &self.saving_path {
+            Some(path) => path,
+            None => if let Some(path) = rfd::FileDialog::new().pick_file() {
+                self.saving_path = Some(path);
+                self.saving_path.as_ref().unwrap()
+            } else {
+                println!("Couldn't get a path to save the image ...");
+                return;
+            },
+        };
+        // TODO: save render texture at requested path
+        println!("{:?}", path);
+    }
+
     pub fn ui_control(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        ui.input(|i| {
+            for event in &i.raw.events {
+                let Event::Key { 
+                    key, physical_key: _, pressed: _, repeat: _, modifiers 
+                } = event else {
+                    continue;
+                };
+                if key == &Key::S && modifiers.command {
+                    self.save();
+                }
+            }
+        });
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.tool, Tool::Selection, "Selection");
             ui.selectable_value(&mut self.tool, Tool::Fill, "Fill");
