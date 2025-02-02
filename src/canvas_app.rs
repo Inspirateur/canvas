@@ -6,7 +6,6 @@ use glam::IVec2;
 use crate::brush::round_brush;
 use crate::brush::Brush;
 use crate::brush_stroke::BrushStroke;
-use crate::easings::*;
 use crate::image::CanvasImage;
 
 /// Shrinks the given size as little as possible to fit the given aspect ratio (width/height)
@@ -50,7 +49,7 @@ impl CanvasApp {
                 ColorImage::new([width, height], Color32::TRANSPARENT),
                 Default::default()
             ),
-            brush: round_brush(4, &exponential_easing),
+            brush: round_brush(4),
             brush_stroke: BrushStroke::new(),
             tool: Tool::Brush,
             stroke_width: 3,
@@ -69,7 +68,7 @@ impl CanvasApp {
                 self.tool == Tool::Brush, 
                 Slider::new(&mut self.stroke_width, 1..=100).step_by(2.).logarithmic(true)
             ).changed() {
-                self.brush = round_brush(self.stroke_width as usize+1, &exponential_easing);
+                self.brush = round_brush(self.stroke_width as usize+1);
             }
             let mut rgba = Rgba::from(self.stroke_color);
             if color_picker::color_edit_button_rgba(ui, &mut rgba, color_picker::Alpha::OnlyBlend).changed() {

@@ -1,4 +1,4 @@
-use std::{ops::Index, slice::Iter};
+use std::ops::Index;
 
 pub struct ArrayQueue<T: Copy, const N: usize>(Vec<T>);
 
@@ -21,10 +21,6 @@ impl<T: Copy, const N: usize> ArrayQueue<T, N> {
 
     pub fn len(&self) -> usize {
         self.0.len()
-    }
-
-    pub fn iter(&self) -> Iter<'_, T> {
-        self.0.iter()
     }
 }
 

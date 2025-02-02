@@ -15,16 +15,17 @@ impl Brush {
     }
 }
 
-pub fn round_brush(diameter: usize, opacity_easing: &dyn Fn(f32) -> f32) -> Brush {
+pub fn round_brush(diameter: usize) -> Brush {
     let mut grid = Grid::new(diameter, diameter);
     let r = diameter as f32/2.;
     for ((x, y), pixel) in grid.indexed_iter_mut() {
         let dist_to_center = ((x as f32-r).powi(2) + (y as f32 - r).powi(2)).sqrt();
-        // the value we feed to the easing function needs to be between 0 and 1
-        // with 0 being the "start" of the animation (here the edge of the brush)
-        // and 1 being the "end" (here the center of brush)
-        let t = 1. - dist_to_center.min(r)/r;
-        *pixel = (opacity_easing(t)*u8::MAX as f32) as u8;
+        if dist_to_center == 0. {
+            *pixel = u8::MAX;
+        } else {
+            let dist_to_edge = r - dist_to_center.min(r);
+            *pixel = (dist_to_edge*(u8::MAX-1) as f32) as u8;
+        }
     }
     Brush { texture: grid, spacing: 1. }
 }
