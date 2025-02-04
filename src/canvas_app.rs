@@ -1,6 +1,4 @@
-use std::ops::Deref;
 use std::path::PathBuf;
-
 use eframe::egui;
 use eframe::egui::*;
 use eframe::App;
@@ -42,6 +40,7 @@ pub struct CanvasApp {
     dragging: bool,
     saving_path: Option<PathBuf>,
     unsaved_changes: bool,
+    last_title: String,
 }
 
 impl CanvasApp {
@@ -63,7 +62,17 @@ impl CanvasApp {
             dragging: false,
             saving_path: None,
             unsaved_changes: true,
+            last_title: String::new(),
         }
+    }
+
+    fn title(&self) -> String {
+        let Some(path) = &self.saving_path else {
+            return "New drawing.png*".to_string();
+        };
+        format!("{}{}", path.file_name().unwrap().to_str().unwrap(), if self.unsaved_changes {
+            "*"
+        } else { "" })
     }
 
     fn save(&mut self) {
@@ -98,8 +107,8 @@ impl CanvasApp {
                     continue;
                 };
                 if key == &Key::S && modifiers.command && self.unsaved_changes {
-                    self.save();
                     self.unsaved_changes = false;
+                    self.save();
                 }
             }
         });
@@ -132,8 +141,6 @@ impl CanvasApp {
     }
 
     pub fn ui_content(&mut self, ui: &mut Ui) -> egui::Response {
-        // TODO: use this https://docs.rs/egui/latest/egui/viewport/enum.ViewportCommand.html
-        // to change window title depending on save path and unsaved changes (like "my_drawing.png*")
         let response = ui
             .allocate_response(
                 shrink_to_aspect_ratio(
@@ -199,5 +206,10 @@ impl App for CanvasApp {
             self.ui_control(ui);
             self.ui_content(ui);
         });
+        let title = self.title();
+        if title != self.last_title {
+            ctx.send_viewport_cmd(ViewportCommand::Title(self.title()));
+            self.last_title = title;
+        }
     }
 }
