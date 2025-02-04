@@ -3,7 +3,7 @@ mod brush_stroke;
 mod vec_map;
 mod brush;
 mod color_presences;
-mod image;
+mod canvas_image;
 mod raster;
 mod canvas_app;
 use canvas_app::CanvasApp;

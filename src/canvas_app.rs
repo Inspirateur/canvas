@@ -1,14 +1,16 @@
+use std::ops::Deref;
 use std::path::PathBuf;
 
 use eframe::egui;
 use eframe::egui::*;
 use eframe::App;
 use glam::IVec2;
+use image::ExtendedColorType;
 
 use crate::brush::round_brush;
 use crate::brush::Brush;
 use crate::brush_stroke::BrushStroke;
-use crate::image::CanvasImage;
+use crate::canvas_image::CanvasImage;
 
 /// Shrinks the given size as little as possible to fit the given aspect ratio (width/height)
 fn shrink_to_aspect_ratio(size: Vec2, aspect_ratio: f32) -> Vec2 {
@@ -39,6 +41,7 @@ pub struct CanvasApp {
     stroke_color: Color32,
     dragging: bool,
     saving_path: Option<PathBuf>,
+    unsaved_changes: bool,
 }
 
 impl CanvasApp {
@@ -58,7 +61,8 @@ impl CanvasApp {
             stroke_width: 3,
             stroke_color: Color32::from_rgb(25, 200, 100),
             dragging: false,
-            saving_path: None
+            saving_path: None,
+            unsaved_changes: true,
         }
     }
 
@@ -73,8 +77,16 @@ impl CanvasApp {
                 return;
             },
         };
-        // TODO: save render texture at requested path
-        println!("{:?}", path);
+        let render = self.image.render();
+        if let Err(err) = image::save_buffer(
+            path, 
+            render.as_raw(), 
+            render.width() as u32, 
+            render.height() as u32, 
+            ExtendedColorType::Rgba8
+        ) {
+            println!("Couldn't save image to path, reason: {:?}", err);
+        }
     }
 
     pub fn ui_control(&mut self, ui: &mut egui::Ui) -> egui::Response {
@@ -85,8 +97,9 @@ impl CanvasApp {
                 } = event else {
                     continue;
                 };
-                if key == &Key::S && modifiers.command {
+                if key == &Key::S && modifiers.command && self.unsaved_changes {
                     self.save();
+                    self.unsaved_changes = false;
                 }
             }
         });
@@ -119,6 +132,8 @@ impl CanvasApp {
     }
 
     pub fn ui_content(&mut self, ui: &mut Ui) -> egui::Response {
+        // TODO: use this https://docs.rs/egui/latest/egui/viewport/enum.ViewportCommand.html
+        // to change window title depending on save path and unsaved changes (like "my_drawing.png*")
         let response = ui
             .allocate_response(
                 shrink_to_aspect_ratio(
@@ -165,6 +180,7 @@ impl CanvasApp {
                 _ => {}
             }
             self.dragging = true;
+            self.unsaved_changes = true;
         }
         if response.drag_stopped() {
             self.image.apply_preview(self.stroke_color);

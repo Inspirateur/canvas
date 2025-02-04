@@ -19,6 +19,10 @@ impl CanvasImage {
         }
     }
 
+    pub fn render(&self) -> ColorImage {
+        self.colors.render()
+    }
+
     pub fn add_stroke(&mut self, brush: &Brush, pos: &IVec2) {
         // adjust pos so that it is at the center of the brush
         let pos = pos - IVec2::new(brush.width() as i32/2, brush.height() as i32/2);

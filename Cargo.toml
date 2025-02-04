@@ -9,3 +9,4 @@ anyhow = "*"
 grid = "*"
 glam = "*"
 rfd = "*"
+image = { version = "*", features = ["png"] }
