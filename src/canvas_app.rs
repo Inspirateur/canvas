@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use arboard::Clipboard;
 use eframe::egui;
 use eframe::egui::*;
 use eframe::App;
@@ -9,14 +10,6 @@ use crate::brush::round_brush;
 use crate::brush::Brush;
 use crate::brush_stroke::BrushStroke;
 use crate::canvas_image::CanvasImage;
-
-/// Shrinks the given size as little as possible to fit the given aspect ratio (width/height)
-fn shrink_to_aspect_ratio(size: Vec2, aspect_ratio: f32) -> Vec2 {
-    Vec2::new(
-        size.x.min(size.y*aspect_ratio), 
-        size.y.min(size.x/aspect_ratio)
-    )
-}
 
 fn to_ivec(pos: Pos2) -> IVec2 {
     IVec2 { x: pos.x as i32, y: pos.y as i32 }
@@ -41,6 +34,8 @@ pub struct CanvasApp {
     saving_path: Option<PathBuf>,
     unsaved_changes: bool,
     last_title: String,
+    clipboard: Clipboard,
+    camera: Rect,
 }
 
 impl CanvasApp {
@@ -63,6 +58,8 @@ impl CanvasApp {
             saving_path: None,
             unsaved_changes: true,
             last_title: String::new(),
+            clipboard: Clipboard::new().unwrap(),
+            camera: Rect::ZERO,
         }
     }
 
@@ -78,7 +75,7 @@ impl CanvasApp {
     fn save(&mut self) {
         let path = match &self.saving_path {
             Some(path) => path,
-            None => if let Some(path) = rfd::FileDialog::new().pick_file() {
+            None => if let Some(path) = rfd::FileDialog::new().save_file() {
                 self.saving_path = Some(path);
                 self.saving_path.as_ref().unwrap()
             } else {
@@ -98,20 +95,18 @@ impl CanvasApp {
         }
     }
 
-    pub fn ui_control(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        ui.input(|i| {
-            for event in &i.raw.events {
-                let Event::Key { 
-                    key, physical_key: _, pressed: _, repeat: _, modifiers 
-                } = event else {
-                    continue;
-                };
-                if key == &Key::S && modifiers.command && self.unsaved_changes {
-                    self.unsaved_changes = false;
-                    self.save();
-                }
-            }
-        });
+    fn paste(&mut self) {
+        let Ok(img) = self.clipboard.get_image() else {
+            return;
+        };
+        // TODO: translate and add this to color presences in self.image
+    }
+
+    fn copy(&self) {
+
+    }
+
+    pub fn ui_control(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.tool, Tool::Selection, "Selection");
             ui.selectable_value(&mut self.tool, Tool::Fill, "Fill");
@@ -136,73 +131,88 @@ impl CanvasApp {
                     TextureOptions::LINEAR
                 );
             }
-        })
-        .response
+        });
     }
 
-    pub fn ui_content(&mut self, ui: &mut Ui) -> egui::Response {
-        let response = ui
-            .allocate_response(
-                shrink_to_aspect_ratio(
-                    ui.available_size_before_wrap(), 
-                    self.image.aspect_ratio()
-                ), 
-                Sense::drag()
-            ).on_hover_cursor(match self.tool {
-                Tool::Brush => egui::CursorIcon::Crosshair,
-                Tool::Fill => egui::CursorIcon::Cell,
-                Tool::Selection => egui::CursorIcon::Copy,
-            });
-        let clip_rect = ui.clip_rect().intersect(response.rect); // Make sure we don't paint out of bounds
-        let painter = ui.painter().with_clip_rect(clip_rect);
-
-        let to_screen = emath::RectTransform::from_to(
-            Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
-            response.rect,
-        );
-        let from_screen = to_screen.inverse();
-
-        if let Some(pointer_pos) = response.interact_pointer_pos() {
-            let mut canvas_pos = from_screen * pointer_pos;
-            canvas_pos.x *= self.image.width() as f32;
-            canvas_pos.y *= self.image.height() as f32;
-            match self.tool {
-                Tool::Brush => {
-                    for brush_pos in self.brush_stroke.update_stroke(canvas_pos, self.brush.spacing) {
-                        self.image.add_stroke(&self.brush, &to_ivec(brush_pos));
+    pub fn ui_content(&mut self, ui: &mut Ui) {
+        // TODO: 
+        // 1. remove the jitter when clamping the camera pos
+        // 2. make Scene panning controlled by middle click or CTRL Click (for tablet pen)
+        // 3. make Scene panning work when cursor is inside canvas (currently doesn't work because allocate_response eats the event ?)
+        self.camera.set_center(self.image.rect().clamp(self.camera.center()));
+        Scene::new().zoom_range(0.1..=8.0).show(ui, &mut self.camera, |ui| {
+            let response = ui
+                .allocate_response(self.image.dims(), Sense::drag())
+                .on_hover_cursor(match self.tool {
+                    Tool::Brush => egui::CursorIcon::Crosshair,
+                    Tool::Fill => egui::CursorIcon::Cell,
+                    Tool::Selection => egui::CursorIcon::Copy,
+                });
+            let to_screen = emath::RectTransform::from_to(
+                Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
+                response.rect,
+            );
+            let from_screen = to_screen.inverse();
+            if response.dragged_by(PointerButton::Primary) {
+                if let Some(pointer_pos) = response.interact_pointer_pos() {
+                    let mut canvas_pos = from_screen * pointer_pos;
+                    canvas_pos.x *= self.image.width() as f32;
+                    canvas_pos.y *= self.image.height() as f32;
+                    match self.tool {
+                        Tool::Brush => {
+                            for brush_pos in self.brush_stroke.update_stroke(canvas_pos, self.brush.spacing) {
+                                self.image.add_stroke(&self.brush, &to_ivec(brush_pos));
+                            }
+                            self.render_texture.set(
+                                self.image.preview_stroke(self.stroke_color), 
+                                TextureOptions::NEAREST
+                            )
+                        },
+                        Tool::Fill => {
+                            if !self.dragging {
+                                self.render_texture.set(
+                                    self.image.fill(&to_ivec(canvas_pos), self.stroke_color), 
+                                    TextureOptions::NEAREST
+                                );
+                            }
+                        },
+                        _ => {}
                     }
-                    self.render_texture.set(
-                        self.image.preview_stroke(self.stroke_color), 
-                        TextureOptions::NEAREST
-                    )
-                },
-                Tool::Fill => {
-                    if !self.dragging {
-                        self.render_texture.set(
-                            self.image.fill(&to_ivec(canvas_pos), self.stroke_color), 
-                            TextureOptions::NEAREST
-                        );
-                    }
-                },
-                _ => {}
+                    self.dragging = true;
+                    self.unsaved_changes = true;
+                }    
             }
-            self.dragging = true;
-            self.unsaved_changes = true;
-        }
-        if response.drag_stopped() {
-            self.image.apply_preview(self.stroke_color);
-            self.brush_stroke.clear_stroke();
-            self.dragging = false;
-        }
-        Image::from_texture((self.render_texture.id(), self.image.dims()))
-            .paint_at(&ui, painter.clip_rect());
-        response
+            if response.drag_stopped() {
+                self.image.apply_preview(self.stroke_color);
+                self.brush_stroke.clear_stroke();
+                self.dragging = false;
+            }
+            Image::from_texture((self.render_texture.id(), self.image.dims()))
+                .bg_fill(Color32::WHITE)
+                .paint_at(&ui, self.image.rect());
+            response
+        });
     }
 }
 
 impl App for CanvasApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         CentralPanel::default().show(ctx, |ui| {
+            ui.input(|i| {
+                for event in &i.raw.events {
+                    let Event::Key { 
+                        key, physical_key: _, pressed: _, repeat: _, modifiers 
+                    } = event else {
+                        continue;
+                    };
+                    if key == &Key::S && modifiers.command && self.unsaved_changes {
+                        self.unsaved_changes = false;
+                        self.save();
+                    } else if key == &Key::V && modifiers.command {
+                        self.paste();
+                    }
+                }
+            });
             self.ui_control(ui);
             self.ui_content(ui);
         });

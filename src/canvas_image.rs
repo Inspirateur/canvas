@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32, ColorImage, Vec2};
+use eframe::egui::{self, Color32, ColorImage, Pos2, Rect, Vec2};
 use glam::IVec2;
 use grid::Grid;
 
@@ -59,7 +59,7 @@ impl CanvasImage {
         self.dims[1]
     }
 
-    pub fn aspect_ratio(&self) -> f32 {
-        self.dims[0] as f32/self.dims[1] as f32
+    pub fn rect(&self) -> egui::Rect {
+        Rect { min: Pos2::ZERO, max: Pos2::new(self.dims[0] as f32, self.dims[1] as f32) }
     }
 }
