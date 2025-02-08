@@ -1,4 +1,4 @@
-use std::u8;
+use std::{collections::BTreeMap, u8};
 use eframe::egui::{Color32, ColorImage};
 use glam::IVec2;
 use grid::Grid;
@@ -17,6 +17,36 @@ impl ColorPresences {
         Self {
             data: VecMap(Vec::new()),
             dims: [width, height],
+        }
+    }
+
+    pub fn add_image(&mut self, pos: (usize, usize), pixel_data: &[u8], width: usize) {
+        let mut color_idx = BTreeMap::new();
+        let mut _x = 0;
+        let mut _y = 0;
+        // TODO: translate and add pixel data to color presences
+        for ((x, y), color) in pixel_data.chunks(4).map(|c| {
+            let res = ((_x, _y), c);
+            _x += 1;
+            if _x >= width {
+                _x = 0;
+                _y += 1;
+            }
+            res
+        }) {
+            let xy = (pos.0+x, pos.1+y);
+            if xy.0 >= self.dims[0] || xy.1 >= self.dims[1] {
+                continue;
+            }
+            let color: [u8; 4] = color.try_into().unwrap();
+            let i: usize = *color_idx.entry(color).or_insert_with(|| 
+                self.data.position(&color).unwrap_or_else(|| {
+                    self.data.0.push((color.clone(), Raster::new(&self.dims)));
+                    self.data.0.len()-1
+                })
+            );
+            self.data[i].0[xy] = u8::MAX;
+
         }
     }
 
@@ -40,7 +70,7 @@ impl ColorPresences {
     pub fn apply(&mut self, brush: &Grid<u8>, pos: &IVec2, color: Color32) {
         let rgba = [color.r(), color.g(), color.b(), color.a()];
         if !self.data.contains_key(&rgba) {
-            self.data.0.push((rgba, Raster(Grid::new(self.dims[0], self.dims[1]))));
+            self.data.0.push((rgba, Raster::new(&self.dims)));
         }
         let presence_idx = self.data.0.iter().position(|(c, _)| *c == rgba).unwrap();
         for ((x, y), &new_val) in brush.indexed_iter() {
@@ -93,7 +123,7 @@ impl ColorPresences {
     pub fn fill(&mut self, pos: &IVec2, color: Color32) {
         let rgba = [color.r(), color.g(), color.b(), color.a()];
         if !self.data.contains_key(&rgba) {
-            self.data.0.push((rgba, Raster(Grid::new(self.dims[0], self.dims[1]))));
+            self.data.0.push((rgba, Raster::new(&self.dims)));
         }
         let start = (pos.x as usize, pos.y as usize);
         let start_colors = self.colors_at(start);

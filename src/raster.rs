@@ -5,6 +5,10 @@ use grid::Grid;
 pub struct Raster(pub Grid<u8>);
 
 impl Raster {
+    pub fn new(dims: &[usize; 2]) -> Self {
+        Self(Grid::new(dims[0], dims[1]))
+    }
+
     pub fn set_max(&mut self, other: &Grid<u8>, pos: &IVec2) {
         for ((x, y), val) in other.indexed_iter() {
             let pos = pos + IVec2::new(x as i32, y as i32);

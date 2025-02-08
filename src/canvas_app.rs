@@ -1,5 +1,7 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use arboard::Clipboard;
+use arboard::ImageData;
 use eframe::egui;
 use eframe::egui::*;
 use eframe::App;
@@ -99,11 +101,17 @@ impl CanvasApp {
         let Ok(img) = self.clipboard.get_image() else {
             return;
         };
-        // TODO: translate and add this to color presences in self.image
+        self.image.add_image((0, 0), &img.bytes, img.width);
     }
 
-    fn copy(&self) {
-
+    fn copy(&mut self) {
+        if let Err(err) = self.clipboard.set_image(ImageData {
+            width: self.image.width(),
+            height: self.image.height(),
+            bytes: Cow::Borrowed(self.image.render().as_raw())
+        }) {
+            println!("Couldn't copy the image, reason: {:?}", err);
+        }
     }
 
     pub fn ui_control(&mut self, ui: &mut egui::Ui) {
@@ -205,11 +213,18 @@ impl App for CanvasApp {
                     } = event else {
                         continue;
                     };
-                    if key == &Key::S && modifiers.command && self.unsaved_changes {
+                    if !modifiers.command {
+                        continue;
+                    }
+                    if key == &Key::S && self.unsaved_changes {
                         self.unsaved_changes = false;
                         self.save();
-                    } else if key == &Key::V && modifiers.command {
+                    } else if key == &Key::V {
+                        // Serious performance issues (kinda expected), need to chunk the color presences
                         self.paste();
+                        self.render_texture.set(self.image.render(), TextureOptions::NEAREST);
+                    } else if key == &Key::C {
+                        self.copy();
                     }
                 }
             });

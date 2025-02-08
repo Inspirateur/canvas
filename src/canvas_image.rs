@@ -47,6 +47,10 @@ impl CanvasImage {
         self.colors.render()
     }
 
+    pub fn add_image(&mut self, pos: (usize, usize), pixel_data: &[u8], width: usize) {
+        self.colors.add_image(pos, pixel_data, width);
+    }
+
     pub fn dims(&self) -> egui::Vec2 {
         Vec2::new(self.dims[0] as f32, self.dims[1] as f32)
     }
