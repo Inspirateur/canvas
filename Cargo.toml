@@ -11,3 +11,6 @@ glam = "*"
 rfd = "*"
 image = { version = "*", features = ["png"] }
 arboard = "*"
+
+[dev-dependencies]
+rand = "*"

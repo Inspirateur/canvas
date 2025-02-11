@@ -6,6 +6,7 @@ mod color_presences;
 mod canvas_image;
 mod raster;
 mod canvas_app;
+mod packed_u8;
 use canvas_app::CanvasApp;
 use eframe::Result;
 
