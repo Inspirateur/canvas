@@ -37,8 +37,8 @@ pub struct CanvasApp {
 
 impl CanvasApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let width = 1280;
-        let height = 720;
+        let width = 640;
+        let height = 480;
         Self {
             image: CanvasImage::new(width, height),
             render_texture: _cc.egui_ctx.load_texture(

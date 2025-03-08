@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet, HashSet}, u8};
+use std::{collections::{BTreeMap, HashSet}, u8};
 
 use eframe::egui::{self, Color32, ColorImage, Pos2, Rect, Vec2};
 use glam::IVec2;
@@ -305,12 +305,12 @@ impl CanvasImage {
         self.checked_span_add(&mut spans, start_span, start.1, From::Above);
         self.checked_span_add(&mut spans, start_span, start.1, From::Below);
         while let Some(span) = spans.pop() {
-            let child_span = self.fill_span((span.left, span.y), 0, self.dims[1], &mut pixel_fill);
+            let child_span = self.fill_span((span.left, span.y), 0, self.dims[0], &mut pixel_fill);
             self.checked_span_add(&mut spans, child_span, span.y, span.from);
             let left = child_span.0;
             let mut right = child_span.1+1;
             while right < span.right {
-                let child_span = self.fill_span((right, span.y), span.left, self.dims[1], &mut pixel_fill);
+                let child_span = self.fill_span((right, span.y), span.left, self.dims[0], &mut pixel_fill);
                 self.checked_span_add(&mut spans, child_span, span.y, span.from);
                 right = child_span.1+1;
             }
