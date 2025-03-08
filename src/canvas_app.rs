@@ -37,8 +37,8 @@ pub struct CanvasApp {
 
 impl CanvasApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let width = 1024;
-        let height = 1024;
+        let width = 1280;
+        let height = 720;
         Self {
             image: CanvasImage::new(width, height),
             render_texture: _cc.egui_ctx.load_texture(
@@ -159,8 +159,9 @@ impl CanvasApp {
             if response.dragged_by(PointerButton::Primary) {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
                     let mut canvas_pos = from_screen * pointer_pos;
-                    canvas_pos.x *= self.image.width() as f32;
-                    canvas_pos.y *= self.image.height() as f32;
+                    let min_axis = self.image.width().min(self.image.height()) as f32;
+                    canvas_pos.x *= min_axis;
+                    canvas_pos.y *= min_axis;
                     match self.tool {
                         Tool::Brush => {
                             self.render_texture.set(
