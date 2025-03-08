@@ -5,17 +5,12 @@ use arboard::ImageData;
 use eframe::egui;
 use eframe::egui::*;
 use eframe::App;
-use glam::IVec2;
 use image::ExtendedColorType;
 
 use crate::brush::round_brush;
 use crate::brush::Brush;
 use crate::brush_stroke::BrushStroke;
 use crate::canvas_image::CanvasImage;
-
-fn to_ivec(pos: Pos2) -> IVec2 {
-    IVec2 { x: pos.x as i32, y: pos.y as i32 }
-}
 
 #[derive(PartialEq, Eq)]
 enum Tool {
@@ -42,8 +37,8 @@ pub struct CanvasApp {
 
 impl CanvasApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let width = 256;
-        let height = 256;
+        let width = 1024;
+        let height = 1024;
         Self {
             image: CanvasImage::new(width, height),
             render_texture: _cc.egui_ctx.load_texture(
@@ -168,18 +163,19 @@ impl CanvasApp {
                     canvas_pos.y *= self.image.height() as f32;
                     match self.tool {
                         Tool::Brush => {
-                            for brush_pos in self.brush_stroke.update_stroke(canvas_pos, self.brush.spacing) {
-                                self.image.add_stroke(&self.brush, &to_ivec(brush_pos));
-                            }
                             self.render_texture.set(
-                                self.image.preview_stroke(self.stroke_color), 
+                                self.image.preview_with(
+                                    &self.brush, 
+                                    self.stroke_color, 
+                                    self.brush_stroke.update_stroke(canvas_pos, self.brush.spacing)
+                                ).clone(), 
                                 TextureOptions::NEAREST
                             )
                         },
                         Tool::Fill => {
                             if !self.dragging {
                                 self.render_texture.set(
-                                    self.image.fill(&to_ivec(canvas_pos), self.stroke_color), 
+                                    self.image.fill(canvas_pos, self.stroke_color).clone(), 
                                     TextureOptions::NEAREST
                                 );
                             }
