@@ -9,6 +9,8 @@ paint but better
 - [x] Copy/Paste
 - [ ] Selection
 - [ ] Undo
+- [ ] Color palette
+- [ ] Color picker
 
 ### Demo
 [![Paint but better demo](https://img.youtube.com/vi/k0NZiPwENmE/0.jpg)](https://www.youtube.com/watch?v=k0NZiPwENmE)
